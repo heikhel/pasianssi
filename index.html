@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pasianssi – Klondike & Pyramid (yksi HTML-sivu)</title>
+<style>
+  :root{
+    --card-w: 88px;
+    --card-h: 124px;
+    --radius: 10px;
+    --gap: 14px;
+    --tableau-vgap: 28px;
+    --bg: #0a3d2e;
+    --felt: #0e5b43;
+    --white: #fff;
+    --black: #111;
+    --shadow: 0 6px 14px rgba(0,0,0,.35);
+    --shadow-soft: 0 2px 8px rgba(0,0,0,.25);
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background: radial-gradient(1000px 600px at 30% -20%, var(--felt), var(--bg));
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    color: var(--white);
+    user-select: none;
+    overflow: hidden;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 14px; gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0));
+    backdrop-filter: blur(3px);
+    flex-wrap: wrap;
+  }
+  .left, .right{display:flex; align-items:center; gap:10px; flex-wrap: wrap;}
+  .title{font-weight:700; letter-spacing:.3px}
+  button, select, input[type="checkbox"]{
+    background: rgba(255,255,255,.1);
+    color: var(--white);
+    border: 1px solid rgba(255,255,255,.18);
+    padding: 8px 12px; border-radius: 10px; cursor: pointer;
+    box-shadow: var(--shadow-soft);
+  }
+  select{ padding-right: 28px; }
+  label{display:flex; align-items:center; gap:6px;}
+  button:hover, select:hover{background: rgba(255,255,255,.16)}
+  button:active{transform: translateY(1px)}
+  .stat{opacity:.9; font-variant-numeric: tabular-nums}
+  input[type="range"]{
+    appearance: none; height: 8px; border-radius: 999px;
+    background: rgba(255,255,255,.18); outline: none; width: 120px;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.4);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; border: none; box-shadow: 0 1px 2px rgba(0,0,0,.4);
+    cursor: pointer;
+  }
+
+  #table{position:relative; width:100vw; height: calc(100vh - 110px); padding: 16px; box-sizing: border-box;}
+  .row{display:flex; gap: var(--gap);}
+  .top-row{margin-bottom: 24px;}
+  .stack{position:relative; width: var(--card-w); height: var(--card-h); border-radius: var(--radius);
+         box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); outline: 2px dashed rgba(255,255,255,.06);
+         outline-offset: -6px; background: rgba(255,255,255,.03);}
+  .stack.found{background: rgba(255,255,255,.05)}
+
+  /* Kortti */
+  .card{
+    position:absolute; width: var(--card-w); height: var(--card-h); border-radius: var(--radius);
+    background: var(--white); color: var(--black);
+    box-shadow: var(--shadow);
+    transform-origin: center; transition: box-shadow .1s ease, transform .08s ease;
+    cursor: grab;
+  }
+  .card.face-down{ background: repeating-linear-gradient(45deg, #0f7f9d, #0f7f9d 8px, #0c6a84 8px, #0c6a84 16px);
+                   border: 2px solid #0a566a; box-shadow: var(--shadow);}
+  .card.face-up{ border: 1px solid #d6d6d6; }
+  .card.dragging{ box-shadow: 0 18px 28px rgba(0,0,0,.5); filter: drop-shadow(0 8px 14px rgba(0,0,0,.45)); cursor: grabbing; }
+
+  .corner{position:absolute; font-weight: 700; font-size: 18px; line-height: 1; text-align:center;}
+  .corner.top{top:6px; left:7px}
+  .corner.bot{bottom:6px; right:7px; transform: rotate(180deg)}
+  .suit{display:block; font-size:16px;}
+  .red{color:#c22626}
+  .black{color:#1b1b1b}
+
+  .pips{position:absolute; inset: 12% 10% 12% 10%; display:grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 2px;}
+  .pip{display:flex; align-items:center; justify-content:center; font-size:22px;}
+  .face{position:absolute; inset: 22% 12% 16% 12%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:62px; letter-spacing:1px; opacity:.9}
+  .ace{position:absolute; inset: 20% 12% 20% 12%; display:flex; align-items:center; justify-content:center; font-size:60px}
+
+  #foundations, #stockline{display:flex; gap: var(--gap);}
+  #tableau{display:flex; gap: var(--gap);}
+  .tcol{position:relative; width: var(--card-w); min-height: var(--card-h);}
+  .tcol .card{position:absolute;}
+
+  /* Pyramidin kontti */
+  #pyramid{ position:relative; width: calc(100% - 32px); height: calc(100% - 160px); margin: 0 auto; }
+  .prow{ position:absolute; left:50%; transform: translateX(-50%); }
+  .p-card{ position:absolute; }
+
+  /* Tyhjien perustusten maamerkki */
+  .found:empty::after{
+    content: attr(data-suit);
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size: 64px; line-height: 1;
+    color: rgba(0,0,0,.28);
+    filter: drop-shadow(0 1px 0 rgba(255,255,255,.15));
+  }
+  .found.red:empty::after{ color: rgba(255,255,255,.22); }
+
+  /* Pudotuskohdan korostus */
+  .drop-ok{box-shadow: inset 0 0 0 2px #6ee7b7, inset 0 0 0 6px rgba(110,231,183,.2), var(--shadow)}
+  .drop-bad{box-shadow: inset 0 0 0 2px #f87171, inset 0 0 0 6px rgba(248,113,113,.2), var(--shadow)}
+
+  /* Valinta pyramidissa */
+  .sel{ outline: 3px solid #6ee7b7; outline-offset: -3px; }
+
+  /* Modaalit (voitto + ohje) */
+  .modal{position: fixed; inset: 0; display:none; align-items: center; justify-content:center; background: rgba(0,0,0,.45); z-index: 99999;}
+  .modal.in{display:flex}
+  .dialog{background: rgba(20,20,20,.9); color:#fff; padding: 22px 20px; border-radius: 16px; box-shadow: var(--shadow); min-width: 300px; max-width: 820px;}
+  .dialog h2{margin:.1em 0 .6em}
+  .dialog .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:14px}
+  .confetti{position:fixed; inset:0; pointer-events:none}
+
+  /* Select popup fix */
+  #gameMode, #drawMode, #passLimit { color:#fff; background: rgba(255,255,255,.12); }
+  #gameMode option, #drawMode option, #passLimit option { color:#111; background:#fff; }
+  #gameMode option:checked, #drawMode option:checked, #passLimit option:checked { color:#fff; background:#0e5b43; }
+
+  /* Pakan kielto-efekti */
+  @keyframes deny { 0%,100%{ outline-color: rgba(255,255,255,.06);} 50%{ outline-color: rgba(248,113,113,.9);} }
+  #stock.deny { animation: deny .35s ease; }
+
+  /* Ohje-välilehdet */
+  .tabs{display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap}
+  .tabbtn{padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.08); cursor:pointer}
+  .tabbtn.active{background: rgba(99,241,198,.18); border-color: rgba(99,241,198,.45)}
+  .helpcontent{max-height:60vh; overflow:auto; padding-right:6px}
+  .helpcontent h3{margin:.6em 0 .2em}
+  .helpcontent ul{margin:.3em 0 .8em 1.2em}
+</style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <span class="title">Pasianssi</span>
+      <label>Pelimuoto:
+        <select id="gameMode">
+          <option value="klondike">Klondike</option>
+          <option value="pyramid">Pyramid</option>
+        </select>
+      </label>
+      <button id="newGame">Uusi peli</button>
+      <button id="undoBtn" title="Peru siirto (Ctrl/Cmd+Z)">Peru siirto</button>
+      <label id="drawWrap">Nostotapa:
+        <select id="drawMode">
+          <option value="1">1 kortti</option>
+          <option value="3">3 korttia</option>
+        </select>
+      </label>
+      <label id="passWrap">Kierrosraja:
+        <select id="passLimit">
+          <option value="0">Rajaton</option>
+          <option value="2">2 kertaa</option>
+          <option value="3">3 kertaa</option>
+        </select>
+      </label>
+      <button id="autoBtn" title="Siirrä mahdollisia kortteja perustuksiin">Automaatti</button>
+      <button id="helpBtn" title="Ohjeet (klikkaa)">❓ Ohje</button>
+    </div>
+    <div class="right">
+      <label>🔊 Äänet
+        <input type="checkbox" id="soundToggle" checked />
+      </label>
+      <label>Voimakkuus
+        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.5" />
+      </label>
+      <span id="pScoreWrap" class="stat" style="display:none;">Pyramid-kortteja: <b id="pScore">28</b></span>
+      <span class="stat">Kierrokset: <b id="passes">∞</b></span>
+      <span class="stat">Siirrot: <b id="moves">0</b></span>
+      <span class="stat">Aika: <b id="time">00:00</b></span>
+    </div>
+  </header>
+
+  <div id="table">
+    <div class="row top-row">
+      <div id="stockline" class="row">
+        <div id="stock" class="stack" aria-label="Pakka"></div>
+        <div id="waste" class="stack" aria-label="Jäte"></div>
+      </div>
+      <div id="foundations" class="row" aria-label="Perustukset">
+        <div class="stack found" data-suit="♠"></div>
+        <div class="stack found red" data-suit="♥"></div>
+        <div class="stack found red" data-suit="♦"></div>
+        <div class="stack found" data-suit="♣"></div>
+      </div>
+    </div>
+
+    <div id="tableau" aria-label="Pöytärivit"></div>
+    <div id="pyramid" aria-label="Pyramidi" style="display:none"></div>
+  </div>
+
+  <canvas class="confetti" id="confetti"></canvas>
+
+  <!-- Voittomodaali -->
+  <div class="modal" id="winModal" role="dialog" aria-modal="true">
+    <div class="dialog">
+      <h2>Onnea, voitit pelin! 🎉</h2>
+      <p>Kaikki kortit poistettiin / siirrettiin sääntöjen mukaan.</p>
+      <div class="actions">
+        <button onclick="newGame()">Uusi peli</button>
+        <button onclick="document.getElementById('winModal').classList.remove('in')">Sulje</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ohje-modaali -->
+  <div class="modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="dialog">
+      <h2 id="helpTitle">Ohjeet</h2>
+      <div class="tabs">
+        <button class="tabbtn" id="tabKlondike">Klondike</button>
+        <button class="tabbtn" id="tabPyramid">Pyramid</button>
+      </div>
+      <div id="helpBody" class="helpcontent" tabindex="0"></div>
+      <div class="actions">
+        <button onclick="document.getElementById('helpModal').classList.remove('in')">Sulje</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const SUITS = ['♠','♥','♦','♣'];
+  const RANKS = [1,2,3,4,5,6,7,8,9,10,11,12,13];
+  const isRed = s => (s==='♥' || s==='♦');
+  const rankToLabel = r => ({1:'A',11:'J',12:'Q',13:'K'}[r] || String(r));
+
+  // DOM
+  const elTable = document.getElementById('table');
+  const elStock = document.getElementById('stock');
+  const elWaste = document.getElementById('waste');
+  const elFoundations = document.getElementById('foundations');
+  const elTableau = document.getElementById('tableau');
+  const elPyramid = document.getElementById('pyramid');
+  const elMoves = document.getElementById('moves');
+  const elTime = document.getElementById('time');
+  const elPasses = document.getElementById('passes');
+  const selMode = document.getElementById('gameMode');
+  const drawWrap = document.getElementById('drawWrap');
+  const passWrap = document.getElementById('passWrap');
+  const autoBtn = document.getElementById('autoBtn');
+  const pScoreWrap = document.getElementById('pScoreWrap');
+  const pScore = document.getElementById('pScore');
+  const undoBtn = document.getElementById('undoBtn');
+
+  const helpBtn = document.getElementById('helpBtn');
+  const helpModal = document.getElementById('helpModal');
+  const helpBody = document.getElementById('helpBody');
+  const tabK = document.getElementById('tabKlondike');
+  const tabP = document.getElementById('tabPyramid');
+
+  // State
+  let gameMode = 'klondike';
+  let drawMode = 1, moves=0, timerInt=null, seconds=0;
+  let passLimit = 0, passesUsed = 0;
+  let kState = null;
+  let pState = null, pSel = null;
+
+  // ---- Undo historia ----
+  let history = [];
+  const HISTORY_LIMIT = 200;
+  const deepClone = obj => (window.structuredClone ? structuredClone(obj) : JSON.parse(JSON.stringify(obj)));
+  function pushHistory(){
+    const snap = {
+      gameMode,
+      moves,
+      passesUsed,
+      seconds,
+      kState: gameMode==='klondike' ? deepClone(kState) : null,
+      pState: gameMode==='pyramid'  ? deepClone(pState) : null
+    };
+    history.push(snap);
+    if(history.length>HISTORY_LIMIT) history.shift();
+  }
+  function undo(){
+    if(!history.length) return;
+    const snap = history.pop();
+    gameMode = snap.gameMode;
+    selMode.value = gameMode;
+    moves = snap.moves;
+    passesUsed = snap.passesUsed;
+    seconds = snap.seconds;
+    if(snap.kState) kState = snap.kState;
+    if(snap.pState) { pState = snap.pState; pSel = null; }
+    updateUIForMode();
+    setText(elMoves, String(moves));
+    setText(elPasses, passLimit===0 ? '∞' : `${passesUsed}/${passLimit}`);
+    setText(elTime, new Date(seconds*1000).toISOString().substr(14,5));
+    if(gameMode==='klondike') k_render(); else p_render();
+  }
+
+  // ---- Audio ----
+  const audio = { ctx:null, enabled:true, gain:null };
+  const $sound = document.getElementById('soundToggle');
+  const $vol   = document.getElementById('volume');
+  function ensureAudio(){ if(!audio.ctx){ const Ctx=window.AudioContext||window.webkitAudioContext; audio.ctx=new Ctx(); audio.gain=audio.ctx.createGain(); audio.gain.gain.value=Number($vol.value||0.5); audio.gain.connect(audio.ctx.destination);} }
+  document.addEventListener('pointerdown', ()=>{ if($sound.checked){ ensureAudio(); audio.ctx.resume?.(); } }, {once:true});
+  function setVolume(v){ ensureAudio(); audio.gain.gain.value=v; }
+  $sound.addEventListener('change', ()=>{ audio.enabled=$sound.checked; if(audio.enabled){ ensureAudio(); audio.ctx.resume?.(); } });
+  $vol.addEventListener('input', ()=>setVolume(Number($vol.value)));
+  function perc(freq,dur,type='sine',gain=0.18){ if(!$sound.checked) return; ensureAudio(); const ctx=audio.ctx, o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(audio.gain); const t=ctx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+.01); g.gain.exponentialRampToValueAtTime(1e-4,t+dur); o.start(t); o.stop(t+dur+.05); }
+  function noiseBurst(d=0.12,s=1800,e=500,gain=0.16){ if(!$sound.checked) return; ensureAudio(); const ctx=audio.ctx; const len=Math.floor(ctx.sampleRate*d); const buf=ctx.createBuffer(1,len,ctx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*0.6; const src=ctx.createBufferSource(); src.buffer=buf; const f=ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(s,ctx.currentTime); f.frequency.exponentialRampToValueAtTime(e,ctx.currentTime+d); const g=ctx.createGain(); g.gain.value=gain; src.connect(f); f.connect(g); g.connect(audio.gain); src.start(); src.stop(ctx.currentTime+d+.02); }
+  const playCardPlace=()=>{ perc(220,.07,'triangle',.14); setTimeout(()=>perc(330,.06,'sine',.09),8); };
+  const playFlip=()=>noiseBurst(.11,2200,600,.15);
+  const playInvalid=()=>{ perc(220,.06,'square',.12); setTimeout(()=>perc(160,.08,'square',.1),60); };
+  const playWin=()=>{ const s=[523.25,659.25,783.99,1046.5]; let d=0; s.forEach((f,i)=>{ setTimeout(()=>perc(f,i<3?.18:.28,'sine',.18),d*1000); d+=(i<3?.14:.22); }); };
+
+  // Utils
+  const setText=(el,v)=>{ if(el) el.textContent=v; };
+  const clearChildren=el=>{ while(el.firstChild) el.removeChild(el.firstChild); };
+  const positionCard=(el,x,y)=>{ el.style.left=x+'px'; el.style.top=y+'px'; };
+  const fmtTime=s=>new Date(s*1000).toISOString().substr(14,5);
+  const updatePassesText=()=>setText(elPasses, passLimit===0 ? '∞' : `${passesUsed}/${passLimit}`);
+
+  function newDeck(){
+    const deck=[]; for(const s of SUITS) for(const r of RANKS)
+      deck.push({suit:s, rank:r, faceUp:false, id:`${s}${r}-${Math.random().toString(36).slice(2,8)}`});
+    for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
+    return deck;
+  }
+  function createFaceCardEl(c){
+    const el=document.createElement('div'); el.className='card face-up'; el.draggable=false;
+    const t=document.createElement('div'); t.className='corner top '+(isRed(c.suit)?'red':'black'); t.innerHTML=`${rankToLabel(c.rank)}<span class="suit">${c.suit}</span>`;
+    const b=document.createElement('div'); b.className='corner bot '+(isRed(c.suit)?'red':'black'); b.innerHTML=`${rankToLabel(c.rank)}<span class="suit">${c.suit}</span>`;
+    el.appendChild(t); el.appendChild(b);
+    if(c.rank===1){ const a=document.createElement('div'); a.className='ace '+(isRed(c.suit)?'red':'black'); a.textContent=c.suit; el.appendChild(a); }
+    else if(c.rank>=11){ const f=document.createElement('div'); f.className='face '+(isRed(c.suit)?'red':'black'); f.textContent={11:'J',12:'Q',13:'K'}[c.rank]; el.appendChild(f); }
+    else { const p=document.createElement('div'); p.className='pips '+(isRed(c.suit)?'red':'black'); const L={2:[[1,1],[3,3]],3:[[1,1],[2,2],[3,3]],4:[[1,1],[1,3],[3,1],[3,3]],5:[[1,1],[1,3],[2,2],[3,1],[3,3]],6:[[1,1],[2,1],[3,1],[1,3],[2,3],[3,3]],7:[[1,1],[2,1],[3,1],[2,2],[1,3],[2,3],[3,3]],8:[[1,1],[2,1],[3,1],[1,2],[3,2],[1,3],[2,3],[3,3]],9:[[1,1],[2,1],[3,1],[1,2],[2,2],[3,2],[1,3],[2,3],[3,3]],10:[[1,1],[2,1],[3,1],[1,2],[3,2],[2,2],[1,3],[2,3],[3,3],[2,3]]}; for(const [gx,gy] of (L[c.rank]||[])){ const pip=document.createElement('div'); pip.className='pip'; pip.textContent=c.suit; pip.style.gridColumn=gx; pip.style.gridRow=gy; p.appendChild(pip);} el.appendChild(p); }
+    el.dataset.suit=c.suit; el.dataset.rank=String(c.rank); el.dataset.id=c.id;
+    return el;
+  }
+  const makeCardBack=()=>{ const el=document.createElement('div'); el.className='card face-down'; return el; };
+
+  // UI mode toggling
+  function updateUIForMode(){
+    const isK = (gameMode==='klondike');
+    elFoundations.style.display = isK ? '' : 'none';
+    elTableau.style.display     = isK ? '' : 'none';
+    elPyramid.style.display     = isK ? 'none' : '';
+    drawWrap.style.display      = isK ? '' : 'none';
+    autoBtn.style.display       = isK ? '' : 'none';
+    passWrap.style.display      = '';
+    pScoreWrap.style.display    = isK ? 'none' : '';
+  }
+
+  /* ========= KLONDIKE ========= */
+  function k_deal(deck){
+    const tableau=Array.from({length:7},()=>[]);
+    for(let c=0;c<7;c++) for(let r=0;r<=c;r++){ const card=deck.pop(); tableau[c].push(card); card.faceUp=(r===c); }
+    return {stock:deck, waste:[], foundations:[[],[],[],[]], tableau};
+  }
+  function k_canPlaceOnTableau(m,t){ if(!t) return m.rank===13; const diff=t.rank-m.rank; return (isRed(m.suit)!==isRed(t.suit)) && diff===1; }
+  function k_isValidRun(st){ for(let i=0;i<st.length-1;i++){ const a=st[i],b=st[i+1]; if(!(a.faceUp&&b.faceUp)) return false; if(isRed(a.suit)===isRed(b.suit)) return false; if(a.rank!==b.rank+1) return false; } return true; }
+  function k_canPlaceOnFoundation(card,i){ const suit=SUITS[i], pile=kState.foundations[i]; if(!pile.length) return card.rank===1&&card.suit===suit; const top=pile[pile.length-1]; return card.suit===suit && card.rank===top.rank+1; }
+  function k_onStockClick(){
+    if(gameMode!=='klondike') return;
+    if(kState.stock.length){
+      pushHistory();
+      const n=Math.min(drawMode,kState.stock.length);
+      for(let i=0;i<n;i++){ const c=kState.stock.pop(); c.faceUp=true; kState.waste.push(c); }
+      playFlip(); k_incMoves(); k_render(); k_checkWin();
+    } else if(kState.waste.length){
+      if(passLimit===0||passesUsed<passLimit){
+        pushHistory();
+        while(kState.waste.length){ const c=kState.waste.pop(); c.faceUp=false; kState.stock.push(c); }
+        passesUsed++; playFlip(); updatePassesText(); k_render();
+      } else { elStock.classList.remove('deny'); void elStock.offsetWidth; elStock.classList.add('deny'); playInvalid(); }
+    }
+  }
+  function k_tryMoveToFoundationById(id){
+    const loc=k_findCard(id);
+    if(!loc||(loc.pile==='tableau'&&!k_topOfRunIsThis(loc))) return false;
+    const card=k_getCardRef(loc);
+    for(let i=0;i<4;i++){
+      if(k_canPlaceOnFoundation(card,i)){
+        pushHistory();
+        k_removeCardAt(loc); kState.foundations[i].push(card); playCardPlace(); k_postMove(); return true;
+      }
+    }
+    return false;
+  }
+  function k_findCard(id){ for(let i=0;i<7;i++) for(let j=0;j<kState.tableau[i].length;j++) if(kState.tableau[i][j].id===id) return {pile:'tableau',tIndex:i,index:j}; if(kState.waste.length&&kState.waste[kState.waste.length-1].id===id) return {pile:'waste',index:kState.waste.length-1}; for(let f=0;f<4;f++) if(kState.foundations[f].length&&kState.foundations[f][kState.foundations[f].length-1].id===id) return {pile:'foundation',fIndex:f}; return null; }
+  const k_getCardRef=loc=> loc.pile==='tableau'?kState.tableau[loc.tIndex][loc.index] : loc.pile==='waste'?kState.waste[loc.index] : kState.foundations[loc.fIndex][kState.foundations[loc.fIndex].length-1];
+  const k_removeCardAt=loc=> loc.pile==='tableau'?kState.tableau[loc.tIndex].splice(loc.index,1)[0] : loc.pile==='waste'?kState.waste.pop() : kState.foundations[loc.fIndex].pop();
+  const k_topOfRunIsThis=loc=> loc.pile!=='tableau' || kState.tableau[loc.tIndex][kState.tableau[loc.tIndex].length-1].id===kState.tableau[loc.tIndex][loc.index].id;
+  function k_postMove(){ k_turnUpLastCards(); k_incMoves(); k_render(); k_checkWin(); }
+  function k_turnUpLastCards(){ for(const col of kState.tableau){ if(col.length && !col[col.length-1].faceUp) col[col.length-1].faceUp=true; } }
+  function k_incMoves(){ moves++; setText(elMoves,String(moves)); }
+  function k_checkWin(){ const tot=kState.foundations.reduce((a,p)=>a+p.length,0); if(tot===52){ celebrate(); playWin(); document.getElementById('winModal').classList.add('in'); stopTimer(); } }
+
+  // Klondike: Automaattinen siirto perustuksiin
+  function k_auto(){
+    let moved=false, action=()=>{};
+    if(kState.waste.length){
+      const c=kState.waste.at(-1);
+      for(let i=0;i<4;i++){ if(k_canPlaceOnFoundation(c,i)){ moved=true; action=()=>{ kState.waste.pop(); kState.foundations[i].push(c); }; break; } }
+    }
+    if(!moved){
+      for(let i=0;i<7;i++){
+        const col=kState.tableau[i]; if(!col.length) continue;
+        const c=col.at(-1);
+        for(let f=0; f<4; f++){ if(k_canPlaceOnFoundation(c,f)){ moved=true; action=()=>{ col.pop(); kState.foundations[f].push(c); }; break; } }
+        if(moved) break;
+      }
+    }
+    if(moved){
+      pushHistory();
+      action(); playCardPlace(); k_postMove();
+    }
+  }
+
+  // Drag (Klondike)
+  function k_startDrag(ev,card){
+    const t=ev.currentTarget, pile=t.dataset.pile;
+    const tIndex=pile==='tableau'?Number(t.dataset.tIndex):null;
+    const index =pile==='tableau'?Number(t.dataset.index):(pile==='waste'?kState.waste.length-1:null);
+    const fIndex=pile==='foundation'?Number(t.dataset.fIndex):null;
+    if(pile==='tableau'){ const col=kState.tableau[tIndex]; if(!col[index].faceUp) return; const cand=kState.tableau[tIndex].slice(index); if(!k_isValidRun(cand)) return; }
+    ev.preventDefault(); t.setPointerCapture?.(ev.pointerId);
+    const tableRect=elTable.getBoundingClientRect(), targetRect=t.getBoundingClientRect();
+    const grabDX=ev.clientX-targetRect.left, grabDY=ev.clientY-targetRect.top;
+    let stack=[]; if(pile==='tableau') stack=kState.tableau[tIndex].slice(index); else if(pile==='waste') stack=[kState.waste.at(-1)]; else stack=[kState.foundations[fIndex].at(-1)];
+    const ghost=document.createElement('div'); ghost.style.position='absolute'; ghost.style.pointerEvents='none'; ghost.style.zIndex=9999;
+    const yGap=28; stack.forEach((c,i)=>{ const el=createFaceCardEl(c); el.classList.add('dragging'); el.style.top=(i*yGap)+'px'; ghost.appendChild(el); }); elTable.appendChild(ghost);
+    const move=(x,y)=>{ ghost.style.left=(x-tableRect.left-grabDX)+'px'; ghost.style.top=(y-tableRect.top-grabDY)+'px'; };
+    move(ev.clientX,ev.clientY);
+    const onMove=e=>{ move(e.clientX,e.clientY); k_highlightDrops(stack); };
+    const onUp =e=>{ t.releasePointerCapture?.(e.pointerId); document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); ghost.remove(); k_clearHighlights(); const drop=k_pickDropTarget(e.clientX,e.clientY); if(!drop) return; k_doMove(stack,pile,tIndex,index,drop,fIndex); };
+    document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
+  }
+  const elementsAtPoint=(x,y)=>document.elementsFromPoint(x,y);
+  function k_pickDropTarget(x,y){ const els=elementsAtPoint(x,y); for(const el of els){ if(el.classList.contains('card')&&el.dataset.pile==='foundation') return {type:'foundation',fIndex:Number(el.dataset.fIndex)}; if(el.classList.contains('stack')&&el.parentElement?.id==='foundations') return {type:'foundation',fIndex:[...el.parentElement.children].indexOf(el)}; if(el.classList.contains('card')&&el.dataset.pile==='tableau') return {type:'tableau-on-card',tIndex:Number(el.dataset.tIndex),index:Number(el.dataset.index)}; if(el.classList.contains('tcol')) return {type:'tableau-col',tIndex:Number(el.dataset.tIndex)}; } return null; }
+  function k_highlightDrops(stack){ k_clearHighlights(); const top=stack[0]; [...elFoundations.children].forEach((spot,i)=>{ spot.classList.add(k_canPlaceOnFoundation(top,i)?'drop-ok':'drop-bad'); }); kState.tableau.forEach((col,i)=>{ const target=col.at(-1); const ok=k_canPlaceOnTableau(top,target); const colEl=elTableau.children[i]; if(colEl){ colEl.classList.toggle('drop-ok',ok); colEl.classList.toggle('drop-bad',!ok);} }); }
+  const k_clearHighlights=()=>document.querySelectorAll('.drop-ok,.drop-bad').forEach(el=>{ el.classList.remove('drop-ok','drop-bad'); });
+  function k_doMove(stack,fromPile,fromT,fromI,drop,fromF){
+    const top=stack[0];
+    if(drop.type==='foundation'){
+      if(stack.length!==1) return;
+      if(k_canPlaceOnFoundation(top,drop.fIndex)){
+        pushHistory();
+        if(fromPile==='tableau') kState.tableau[fromT].splice(fromI,1);
+        else if(fromPile==='waste') kState.waste.pop();
+        else kState.foundations[fromF].pop();
+        kState.foundations[drop.fIndex].push(top); playCardPlace(); k_postMove();
+      } return;
+    }
+    if(drop.type==='tableau-on-card'||drop.type==='tableau-col'){
+      const tI=drop.tIndex, col=kState.tableau[tI];
+      const target=drop.type==='tableau-on-card'?col[drop.index]:col.at(-1);
+      if(k_canPlaceOnTableau(top,target)){
+        pushHistory();
+        if(fromPile==='tableau'){ const take=kState.tableau[fromT].splice(fromI); kState.tableau[tI].push(...take); }
+        else if(fromPile==='waste'){ kState.tableau[tI].push(kState.waste.pop()); }
+        else { kState.tableau[tI].push(kState.foundations[fromF].pop()); }
+        playCardPlace(); k_postMove();
+      }
+    }
+  }
+  function k_render(){
+    clearChildren(elStock); clearChildren(elWaste);
+    if(kState.stock.length){ const back=makeCardBack(); positionCard(back,0,0); elStock.appendChild(back); }
+    if(kState.waste.length){ const c=kState.waste.at(-1); const el=createFaceCardEl(c); positionCard(el,0,0); el.dataset.pile='waste'; el.addEventListener('pointerdown',ev=>k_startDrag(ev,c)); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); elWaste.appendChild(el); }
+    clearChildren(elFoundations);
+    SUITS.forEach((s,i)=>{ const spot=document.createElement('div'); spot.className='stack found'; if(isRed(s)) spot.classList.add('red'); spot.dataset.fIndex=String(i); spot.dataset.suit=s; const pile=kState.foundations[i]; if(pile.length){ const top=pile.at(-1); const el=createFaceCardEl(top); positionCard(el,0,0); el.dataset.pile='foundation'; el.dataset.fIndex=String(i); el.addEventListener('pointerdown',ev=>k_startDrag(ev,top)); spot.appendChild(el); } elFoundations.appendChild(spot); });
+    clearChildren(elTableau);
+    kState.tableau.forEach((col,ci)=>{ const tcol=document.createElement('div'); tcol.className='tcol'; tcol.dataset.tIndex=String(ci); const y=28; col.forEach((c,ri)=>{ const el=c.faceUp?createFaceCardEl(c):makeCardBack(); positionCard(el,0,ri*y); el.dataset.pile='tableau'; el.dataset.tIndex=String(ci); el.dataset.index=String(ri); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); if(c.faceUp) el.addEventListener('pointerdown',ev=>k_startDrag(ev,c)); tcol.appendChild(el); }); if(!col.length) tcol.classList.add('stack'); elTableau.appendChild(tcol); });
+    setText(elMoves,String(moves)); updatePassesText(); pScoreWrap.style.display='none';
+  }
+  function k_newGame(){ history=[]; moves=0; passesUsed=0; setText(elMoves,'0'); updatePassesText(); startTimer(); kState=k_deal(newDeck()); k_render(); }
+
+  /* ========= PYRAMID ========= */
+  function p_deal(deck){
+    const pyramid=[]; for(let r=0;r<7;r++){ const row=[]; for(let c=0;c<=r;c++){ const card=deck.pop(); card.faceUp=true; row.push(card);} pyramid.push(row); }
+    return {pyramid, stock:deck, waste:[], removed:0};
+  }
+  const p_isExposed=(r,c)=>{ const row=pState?.pyramid?.[r]; if(!row||!row[c]) return false; if(r===6) return true; const dl=pState.pyramid[r+1][c], dr=pState.pyramid[r+1][c+1]; return (!dl && !dr); };
+  const p_val=card=> card.rank===13?13:card.rank;
+
+  function p_tryRemovePair(aSel,bSel){
+    const get=sel=> sel.type==='pyr'?pState.pyramid[sel.r][sel.c] : pState.waste.at(-1);
+    const a=get(aSel), b=bSel?get(bSel):null; if(!a) return false;
+    if(!bSel){
+      if(p_val(a)===13){
+        pushHistory();
+        if(aSel.type==='pyr'&&p_isExposed(aSel.r,aSel.c)){ pState.pyramid[aSel.r][aSel.c]=null; pState.removed++; playCardPlace(); p_afterMove(); return true; }
+        if(aSel.type==='waste'){ pState.waste.pop(); pState.removed++; playCardPlace(); p_afterMove(); return true; }
+      }
+      return false;
+    }
+    if(!b||p_val(a)+p_val(b)!==13) return false;
+    if(aSel.type==='pyr'&&bSel.type==='pyr'){
+      if(p_isExposed(aSel.r,aSel.c)&&p_isExposed(bSel.r,bSel.c)){
+        pushHistory();
+        pState.pyramid[aSel.r][aSel.c]=null; pState.pyramid[bSel.r][bSel.c]=null; pState.removed+=2; playCardPlace(); p_afterMove(); return true;
+      }
+    }
+    if(aSel.type==='pyr'&&bSel.type==='waste'){
+      if(!p_isExposed(aSel.r,aSel.c)) return false;
+      pushHistory();
+      pState.pyramid[aSel.r][aSel.c]=null; pState.waste.pop(); pState.removed+=2; playCardPlace(); p_afterMove(); return true;
+    }
+    if(aSel.type==='waste'&&bSel.type==='pyr'){
+      if(!p_isExposed(bSel.r,bSel.c)) return false;
+      pushHistory();
+      pState.pyramid[bSel.r][bSel.c]=null; pState.waste.pop(); pState.removed+=2; playCardPlace(); p_afterMove(); return true;
+    }
+    return false;
+  }
+
+  // Nosto: 1 kortti kerrallaan + automaattinen jäte-jäte -pari (13) poisto
+  function p_onStockClick(){
+    if(gameMode!=='pyramid') return;
+
+    if(pState.stock.length){
+      pushHistory();
+      const c=pState.stock.pop(); c.faceUp=true; pState.waste.push(c);
+      playFlip(); p_incMoves();
+
+      // jos kaksi jätepinon päällimmäistä = 13, poista ne heti
+      if(pState.waste.length>=2){
+        const a=pState.waste.at(-1);
+        const b=pState.waste.at(-2);
+        if(p_val(a)+p_val(b)===13){
+          pState.waste.pop();
+          pState.waste.pop();
+          playCardPlace();
+        }
+      }
+      p_render(); p_checkWin();
+    } else if(pState.waste.length){
+      if(passLimit===0||passesUsed<passLimit){
+        pushHistory();
+        while(pState.waste.length){ const c=pState.waste.pop(); c.faceUp=false; pState.stock.push(c); }
+        passesUsed++; playFlip(); updatePassesText(); p_render();
+      } else {
+        elStock.classList.remove('deny'); void elStock.offsetWidth; elStock.classList.add('deny'); playInvalid();
+      }
+    }
+  }
+  function p_onPyramidCardClick(r,c){
+    const card=pState.pyramid[r][c]; if(!card||!p_isExposed(r,c)) return;
+    if(p_val(card)===13){ p_tryRemovePair({type:'pyr',r,c},null); return; }
+    if(pSel && pSel.type==='pyr' && pSel.r===r && pSel.c===c){ pSel=null; p_render(); return; }
+    if(pSel){
+      const ok=p_tryRemovePair(pSel,{type:'pyr',r,c}); if(!ok){ pSel={type:'pyr',r,c}; p_render(); }
+    } else { pSel={type:'pyr',r,c}; p_render(); }
+  }
+  function p_onWasteClick(){
+    if(!pState.waste.length) return;
+    const top=pState.waste.at(-1);
+    if(p_val(top)===13){ p_tryRemovePair({type:'waste'},null); return; }
+    if(pSel){
+      const ok=p_tryRemovePair(pSel,{type:'waste'}); if(!ok){ pSel={type:'waste'}; p_render(); }
+    } else { pSel={type:'waste'}; p_render(); }
+  }
+
+  const p_incMoves=()=>{ moves++; setText(elMoves,String(moves)); };
+  const p_afterMove=()=>{ p_incMoves(); pSel=null; p_render(); p_checkWin(); };
+  const p_remaining=()=>{ let n=0; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(pState.pyramid[r][c]) n++; return n; };
+  function p_checkWin(){ if(p_remaining()===0){ celebrate(); playWin(); document.getElementById('winModal').classList.add('in'); stopTimer(); } }
+
+  function p_render(){
+    clearChildren(elStock); clearChildren(elWaste);
+    if(pState.stock.length){ const back=makeCardBack(); positionCard(back,0,0); elStock.appendChild(back); }
+    if(pState.waste.length){ const c=pState.waste.at(-1); const el=createFaceCardEl(c); positionCard(el,0,0); el.addEventListener('click',p_onWasteClick); if(pSel && pSel.type==='waste') el.classList.add('sel'); elWaste.appendChild(el); }
+
+    // Pyramid – symmetrinen + tyhjä rivi ei blokkaa klikkauksia
+    clearChildren(elPyramid);
+    const cardW=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w'))||88;
+    const xGap=Math.round(cardW*0.52), yGap=Math.round(cardW*0.39);
+
+    for(let r=0;r<7;r++){
+      const rowEl=document.createElement('div');
+      rowEl.className='prow';
+      rowEl.style.top=(r*yGap)+'px';
+      rowEl.style.height='var(--card-h)';
+      rowEl.style.width=(cardW + r*xGap)+'px';
+
+      for(let c=0;c<=r;c++){
+        const card=pState.pyramid[r][c];
+        if(!card) continue;
+        const el=createFaceCardEl(card);
+        el.style.position='absolute';
+        el.style.left=(c*xGap)+'px';
+        el.style.top='0px';
+        el.classList.add('p-card');
+        if(pSel && pSel.type==='pyr' && pSel.r===r && pSel.c===c) el.classList.add('sel');
+        el.addEventListener('click',()=>p_onPyramidCardClick(r,c));
+        rowEl.appendChild(el);
+      }
+
+      rowEl.style.pointerEvents = rowEl.childElementCount ? 'auto' : 'none';
+      elPyramid.appendChild(rowEl);
+    }
+
+    setText(elMoves,String(moves)); updatePassesText();
+    setText(pScore, String(p_remaining()));
+    pScoreWrap.style.display='';
+  }
+  function p_newGame(){ history=[]; moves=0; passesUsed=0; pSel=null; setText(elMoves,'0'); updatePassesText(); startTimer(); pState=p_deal(newDeck()); p_render(); }
+
+  // ---- Ohjeet ----
+  const HELP_KLONDIKE = `
+    <h3>Tavoite</h3>
+    <p>Rakenna neljä perustusta (♠ ♥ ♦ ♣) ässästä kuninkaaseen, kaikki samaa maata.</p>
+    <h3>Jako</h3>
+    <ul>
+      <li>52 kortin pakka, ei jokereita.</li>
+      <li>7 pöytäpinoa: vasemmalta oikealle 1–7 korttia. Vain päällimmäinen on kuvapuoli ylöspäin.</li>
+      <li>Jäljelle jäävät kortit muodostavat <b>varaston</b>; vieressä on <b>jäte</b>.</li>
+    </ul>
+    <h3>Siirrot</h3>
+    <ul>
+      <li><b>Pöytään:</b> alenevasti ja vuorovärein (punainen–musta). Tyhjään pinoon vain <b>Kuningas</b> tai kuninkaalla alkava sarja.</li>
+      <li><b>Perustuksiin:</b> samaa maata nousevasti (A,2,3,…,K). Tuplaklikkaus koettaa siirtää kortin perustuksiin.</li>
+      <li><b>Pinojen siirto:</b> voit raahata useamman kortin, kun järjestys on oikea.</li>
+      <li><b>Varastosta:</b> nosta 1 tai 3 korttia kerrallaan jätepinolle (asetus ”Nostotapa”).</li>
+      <li><b>Kierrätys:</b> kun varasto loppuu, käännä jäte takaisin varastoksi. Kierroksia on rajattomasti tai valintasi mukaan (”Kierrosraja”).</li>
+    </ul>
+    <h3>Voitto</h3>
+    <p>Kaikki 52 korttia ovat perustuksissa.</p>
+    <h3>Vihjeitä</h3>
+    <ul>
+      <li>Raahaa kortteja hiirellä; kaksoisklikkaa korttia siirtääksesi sen mahdollisuuksien mukaan perustuksiin.</li>
+      <li>”Automaatti” siirtää selviä kortteja perustuksiin.</li>
+      <li><b>Peru siirto</b>: käytä nappia tai Ctrl/Cmd+Z.</li>
+    </ul>
+  `;
+  const HELP_PYRAMID = `
+    <h3>Tavoite</h3>
+    <p>Poista kaikki 28 korttia pyramidista muodostamalla pareja, joiden summa on <b>13</b>. Kuningas (K=13) poistuu yksin.</p>
+    <h3>Jako</h3>
+    <ul>
+      <li>Pyramidi 7 riviä: 1,2,3,…,7 korttia (yhteensä 28), kaikki kuvapuoli ylöspäin.</li>
+      <li>Jäljelle jäävät kortit muodostavat <b>varaston</b>; nostetut, joita et käytä heti, menevät <b>jätepinolle</b>.</li>
+    </ul>
+    <h3>Pelaaminen</h3>
+    <ul>
+      <li>Vain <b>paljastetut</b> (ei-peitetyt) pyramidin kortit ovat pelattavissa.</li>
+      <li>Voit poistaa parin (pöytä+pöytä tai pöytä+jätteen päällimmäinen), jos arvot summaavat 13. A=1, J=11, Q=12, K=13.</li>
+      <li>Voit myös poistaa <b>Kuninkaan</b> yksin.</li>
+      <li>Nosta varastosta <b>yksi kortti</b> kerrallaan jätteeseen. Jos jätteen kaksi päällimmäistä summaavat 13, ne poistuvat automaattisesti.</li>
+      <li>Jäte voidaan kääntää takaisin varastoksi asetetun kierrosrajan verran (”2 kertaa” vastaa Par Pyramid -muunnelmaa).</li>
+      <li><b>Peru siirto</b>: käytä nappia tai Ctrl/Cmd+Z.</li>
+    </ul>
+    <h3>Pisteet</h3>
+    <p>Pistesumma on pyramidissa jäljellä olevien korttien määrä (0 = täydellinen tulos).</p>
+  `;
+
+  function renderHelp(which){
+    tabK.classList.toggle('active', which==='klondike');
+    tabP.classList.toggle('active', which==='pyramid');
+    helpBody.innerHTML = (which==='klondike') ? HELP_KLONDIKE : HELP_PYRAMID;
+    helpBody.focus();
+  }
+  function showHelp(){
+    renderHelp(gameMode);
+    helpModal.classList.add('in');
+  }
+  helpBtn.addEventListener('click', showHelp);
+  tabK.addEventListener('click', ()=>renderHelp('klondike'));
+  tabP.addEventListener('click', ()=>renderHelp('pyramid'));
+  helpModal.addEventListener('click', (e)=>{ if(e.target===helpModal) helpModal.classList.remove('in'); });
+
+  // Timer
+  function startTimer(){ stopTimer(); seconds=0; timerInt=setInterval(()=>{ seconds++; setText(elTime,fmtTime(seconds)); },1000); }
+  function stopTimer(){ if(timerInt){ clearInterval(timerInt); timerInt=null; } }
+
+  // Public + UI
+  function newGame(){ if(gameMode==='klondike') k_newGame(); else p_newGame(); }
+  window.newGame=newGame;
+
+  elStock.addEventListener('click', ()=>{ if(gameMode==='klondike') k_onStockClick(); else p_onStockClick(); });
+  document.getElementById('newGame').addEventListener('click', newGame);
+  document.getElementById('autoBtn').addEventListener('click', ()=>k_auto());
+  document.getElementById('drawMode').addEventListener('change', e=>{ drawMode=Number(e.target.value)||1; });
+  document.getElementById('passLimit').addEventListener('change', e=>{ passLimit=Number(e.target.value)||0; passesUsed=0; updatePassesText(); });
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){
+      e.preventDefault(); undo();
+    }
+  });
+
+  selMode.addEventListener('change', ()=>{
+    gameMode = selMode.value;
+    pSel=null; moves=0; setText(elMoves,'0'); seconds=0; updatePassesText();
+    updateUIForMode();
+    newGame();
+  });
+
+  // ---- Käynnistys ----
+  function bootFromSelect(){
+    gameMode = selMode.value || 'klondike';
+    updateUIForMode();
+    newGame();
+    updatePassesText();
+  }
+  bootFromSelect();
+  window.addEventListener('pageshow', bootFromSelect);
+
+  // Konfetti
+  function celebrate(){
+    const canvas=document.getElementById('confetti'), ctx=canvas.getContext('2d'), dpr=window.devicePixelRatio||1;
+    const w=canvas.width=innerWidth*dpr, h=canvas.height=(innerHeight)*dpr; const N=180, parts=[];
+    for(let i=0;i<N;i++) parts.push({x:Math.random()*w, y:-Math.random()*h*0.3, vx:(Math.random()-.5)*2, vy:Math.random()*2+1, r:Math.random()*6+2, a:Math.random()*Math.PI*2});
+    let t=0; const id=setInterval(()=>{ t++; ctx.clearRect(0,0,w,h);
+      for(const p of parts){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.02; p.a+=0.1; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.a); ctx.fillStyle=`hsl(${(p.x/w)*360},85%,60%)`; ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r); ctx.restore(); }
+      if(t>260){ clearInterval(id); ctx.clearRect(0,0,w,h); }
+    },16);
+  }
+})();
+</script>
+</body>
+</html>
