@@ -79,6 +79,11 @@
     box-shadow: var(--shadow);
     transform-origin: center; transition: box-shadow .1s ease, transform .08s ease;
     cursor: grab;
+
+    /* allow pointer dragging on touch devices: prevent default pan/zoom so pointer events get delivered */
+    touch-action: none;
+    -ms-touch-action: none;
+    -webkit-user-drag: none;
   }
   .card.face-down{ background: repeating-linear-gradient(45deg, #0f7f9d, #0f7f9d 8px, #0c6a84 8px, #0c6a84 16px);
                    border: 2px solid #0a566a; box-shadow: var(--shadow);}
@@ -99,6 +104,10 @@
 
   #foundations, #stockline{display:flex; gap: var(--gap);}
   #tableau{display:flex; gap: var(--gap);}
+
+  /* ensure containers involved in dragging don't let touch gestures steal pointer events */
+  .tcol, .stack, .p-card, .prow, #table { touch-action: none; -ms-touch-action: none; -webkit-user-drag: none; }
+
   .tcol{position:relative; width: var(--card-w); min-height: var(--card-h);}
   .tcol .card{position:absolute;}
 
@@ -119,7 +128,7 @@
 
   /* Pudotuskohdan korostus */
   .drop-ok{box-shadow: inset 0 0 0 2px #6ee7b7, inset 0 0 0 6px rgba(110,231,183,.2), var(--shadow)}
-  .drop-bad{box-shadow: inset 0 0 0 2px #f87171, inset 0 0 0 6px rgba(248,113,113,.2), var(--shadow)}
+  .drop-bad{box-shadow: inset 0 0 0 2px #f87171, inset 0 0 0 6px rgba(248,113,113,.2), var(--shadow) }
 
   /* Valinta pyramidissa */
   .sel{ outline: 3px solid #6ee7b7; outline-offset: -3px; }
@@ -447,9 +456,14 @@
     move(ev.clientX,ev.clientY);
     const onMove=e=>{ move(e.clientX,e.clientY); k_highlightDrops(stack); };
     const onUp =e=>{ t.releasePointerCapture?.(e.pointerId); document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); ghost.remove(); k_clearHighlights(); const drop=k_pickDropTarget(e.clientX,e.clientY); if(!drop) return; k_doMove(stack,pile,tIndex,index,drop,fIndex); };
-    document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
   }
   const elementsAtPoint=(x,y)=>document.elementsFromPoint(x,y);
+  function k_pick_drop_card_el(el){
+    // unused helper kept for reference
+    return el;
+  }
   function k_pickDropTarget(x,y){ const els=elementsAtPoint(x,y); for(const el of els){ if(el.classList.contains('card')&&el.dataset.pile==='foundation') return {type:'foundation',fIndex:Number(el.dataset.fIndex)}; if(el.classList.contains('stack')&&el.parentElement?.id==='foundations') return {type:'foundation',fIndex:[...el.parentElement.children].indexOf(el)}; if(el.classList.contains('card')&&el.dataset.pile==='tableau') return {type:'tableau-on-card',tIndex:Number(el.dataset.tIndex),index:Number(el.dataset.index)}; if(el.classList.contains('tcol')) return {type:'tableau-col',tIndex:Number(el.dataset.tIndex)}; } return null; }
   function k_highlightDrops(stack){ k_clearHighlights(); const top=stack[0]; [...elFoundations.children].forEach((spot,i)=>{ spot.classList.add(k_canPlaceOnFoundation(top,i)?'drop-ok':'drop-bad'); }); kState.tableau.forEach((col,i)=>{ const target=col.at(-1); const ok=k_canPlaceOnTableau(top,target); const colEl=elTableau.children[i]; if(colEl){ colEl.classList.toggle('drop-ok',ok); colEl.classList.toggle('drop-bad',!ok);} }); }
   const k_clearHighlights=()=>document.querySelectorAll('.drop-ok,.drop-bad').forEach(el=>{ el.classList.remove('drop-ok','drop-bad'); });
@@ -480,11 +494,11 @@
   function k_render(){
     clearChildren(elStock); clearChildren(elWaste);
     if(kState.stock.length){ const back=makeCardBack(); positionCard(back,0,0); elStock.appendChild(back); }
-    if(kState.waste.length){ const c=kState.waste.at(-1); const el=createFaceCardEl(c); positionCard(el,0,0); el.dataset.pile='waste'; el.addEventListener('pointerdown',ev=>k_startDrag(ev,c)); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); elWaste.appendChild(el); }
+    if(kState.waste.length){ const c=kState.waste.at(-1); const el=createFaceCardEl(c); positionCard(el,0,0); el.dataset.pile='waste'; el.addEventListener('pointerdown',ev=>k_startDrag(ev,c), { passive: false }); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); elWaste.appendChild(el); }
     clearChildren(elFoundations);
-    SUITS.forEach((s,i)=>{ const spot=document.createElement('div'); spot.className='stack found'; if(isRed(s)) spot.classList.add('red'); spot.dataset.fIndex=String(i); spot.dataset.suit=s; const pile=kState.foundations[i]; if(pile.length){ const top=pile.at(-1); const el=createFaceCardEl(top); positionCard(el,0,0); el.dataset.pile='foundation'; el.dataset.fIndex=String(i); el.addEventListener('pointerdown',ev=>k_startDrag(ev,top)); spot.appendChild(el); } elFoundations.appendChild(spot); });
+    SUITS.forEach((s,i)=>{ const spot=document.createElement('div'); spot.className='stack found'; if(isRed(s)) spot.classList.add('red'); spot.dataset.fIndex=String(i); spot.dataset.suit=s; const pile=kState.foundations[i]; if(pile.length){ const top=pile.at(-1); const el=createFaceCardEl(top); positionCard(el,0,0); el.dataset.pile='foundation'; el.dataset.fIndex=String(i); el.addEventListener('pointerdown',ev=>k_startDrag(ev,top), { passive: false }); spot.appendChild(el); } elFoundations.appendChild(spot); });
     clearChildren(elTableau);
-    kState.tableau.forEach((col,ci)=>{ const tcol=document.createElement('div'); tcol.className='tcol'; tcol.dataset.tIndex=String(ci); const y=28; col.forEach((c,ri)=>{ const el=c.faceUp?createFaceCardEl(c):makeCardBack(); positionCard(el,0,ri*y); el.dataset.pile='tableau'; el.dataset.tIndex=String(ci); el.dataset.index=String(ri); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); if(c.faceUp) el.addEventListener('pointerdown',ev=>k_startDrag(ev,c)); tcol.appendChild(el); }); if(!col.length) tcol.classList.add('stack'); elTableau.appendChild(tcol); });
+    kState.tableau.forEach((col,ci)=>{ const tcol=document.createElement('div'); tcol.className='tcol'; tcol.dataset.tIndex=String(ci); const y=28; col.forEach((c,ri)=>{ const el=c.faceUp?createFaceCardEl(c):makeCardBack(); positionCard(el,0,ri*y); el.dataset.pile='tableau'; el.dataset.tIndex=String(ci); el.dataset.index=String(ri); el.addEventListener('dblclick',()=>k_tryMoveToFoundationById(c.id)); if(c.faceUp) el.addEventListener('pointerdown',ev=>k_startDrag(ev,c), { passive: false }); tcol.appendChild(el); }); if(!col.length) tcol.classList.add('stack'); elTableau.appendChild(tcol); });
     setText(elMoves,String(moves)); updatePassesText(); pScoreWrap.style.display='none';
   }
   function k_newGame(){ history=[]; moves=0; passesUsed=0; setText(elMoves,'0'); updatePassesText(); startTimer(); kState=k_deal(newDeck()); k_render(); }
@@ -703,7 +717,7 @@
     }
   });
 
-  selMode.addEventListener('change', ()=>{
+  selMode.addEventListener('change', ()=>{ 
     gameMode = selMode.value;
     pSel=null; moves=0; setText(elMoves,'0'); seconds=0; updatePassesText();
     updateUIForMode();
